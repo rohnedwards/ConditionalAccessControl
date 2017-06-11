@@ -231,3 +231,100 @@ function New-PacAccessControlEntry2 {
 
     #>
 }
+
+function Add-PacAccessControlEntry2 {
+<#
+.SYNOPSIS
+Very primitive function for adding condtional ACEs to a security descriptor object.
+
+.DESCRIPTION
+Add-PacAccessControlEntry2 is a limited version of Add-PacAccessControlEntry that
+can add conditional ACEs to discretionary access control lists. Adding to the system
+access control list (audit entries) is not currently supported.
+
+In order to use the function, you need to have a security descriptor object stored
+in a variable, and that object is passed as the -InputObject to this function. You can
+obtain a security descriptor object by first calling Get-Acl or Get-PacSecurityDescriptor.
+
+After calling this function a few times on the security descriptor object, you'll need
+to save it by calling Set-Acl or Set-PacSecurityDescriptor.
+
+.EXAMPLE
+$TestFile = New-Item -Path $env:temp\test_file.txt -ItemType File -Force
+$SD = Get-Acl $TestFile
+
+# Show the before:
+$SD | Get-PacAccessControlEntry
+
+# Make changes:
+$SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacConditionalAceCondition -MemberOf Administrators, Users)
+$SD | Set-Acl
+
+# Show the after:
+$TestFile | Get-PacAccessControlEntry
+
+.EXAMPLE
+$TestFolder = New-Item -Path $env:temp\test_folder -ItemType Directory -Force
+$SD = Get-PacSecurityDescriptor $TestFolder
+
+# Show the before:
+$SD | Get-PacAccessControlEntry
+
+# Make changes:
+$SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacConditionalAceCondition -MemberOf Administrators, Users)
+$SD | Set-PacSecurityDescriptor -PacSDOption (New-PacSDOption -SecurityDescriptorSections Access)
+
+# Show the after:
+$TestFolder | Get-PacAccessControlEntry
+
+#>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position=0, ValueFromPipeline)]
+        [psobject] $InputObject,
+
+        [ROE.PowerShellAccessControl.Enums.AceType] $AceType,
+        
+        [Parameter(Mandatory)]
+        [ROE.PowerShellAccessControl.PacPrincipal] $Principal,
+
+        [Parameter(Mandatory)]
+        [Alias('FileRights','FileSystemRights')]
+        [System.Security.AccessControl.FileSystemRights] $FolderRights,
+
+        [ROE.PowerShellAccessControl.Enums.AppliesTo] $AppliesTo,
+
+        [Parameter(Mandatory)]
+        # This command exists to allow -Condition to be passed. It has less functionality than Add-PacAccessControlEntry,
+        # and it's internal functionality is funky, so if you're going to use this function, you're going to have to
+        # provide a conditional ACE condition :)
+        [Testing.ConditionalAceCondition] $Condition
+    )
+
+    process {
+
+        # Step 1: Is the InputObject an SD type?
+        if ($InputObject -isnot [ROE.PowerShellAccessControl.AdaptedSecurityDescriptor] -and $InputObject -isnot [System.Security.AccessControl.FileSystemSecurity]) {
+            throw "-InputObject must be a security descriptor object (use Get-Acl or Get-PacSecurityDescriptor)"
+        }
+
+        # Step 2: Convert InputObject to a Raw SD (neither of the valid SD objects know what to do with a conditional ACE)
+        $RawSD = $InputObject | Get-PacRawSecurityDescriptor
+        
+        # Step 3: Create the CommonAce with the condition
+        $null = $PSBoundParameters.Remove('InputObject')
+        $NewAce = New-PacAccessControlEntry2 @PSBoundParameters
+
+        # Just look for the first spot after explicit deny ACEs (before inherited ACEs) to preserve canonical ordering
+        for ($i = 0; $i -lt $RawSD.DiscretionaryAcl.Count; $i++) {
+            $CurrentAce = $RawSD.DiscretionaryAcl[$i]
+            if ($CurrentAce.IsInherited -or $CurrentAce.AceQualifier.ToString() -eq "AccessAllowed") { break }
+        }
+
+        # Step 4: Add the ACE to the SD 
+        $RawSD.DiscretionaryAcl.InsertAce($i, $NewAce)
+
+        # Step 5: Modify the InputObject so it contains the new ACE 
+        $InputObject.SetSecurityDescriptorSddlForm($RawSD.GetSddlForm("All"))
+    }
+}
