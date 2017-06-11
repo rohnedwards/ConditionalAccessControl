@@ -17,24 +17,24 @@ function Get-PacRawSecurityDescriptor {
     }
 }
 
-function New-PacConditionalAceCondition {
+function New-PacAceCondition {
 <#
 .SYNOPSIS
 (Incomplete) Function to create conditional ACE condtions.
 
 .DESCRIPTION
-New-PacConditionalAceCondition is used to create ACE conditions that can be passed to the
+New-PacAceCondition is used to create ACE conditions that can be passed to the
 -Condition parameter of New-PacAccessControlEntry2.
 
 For a primer on conditional ACEs, see here: https://rohnspowershellblog.wordpress.com/2015/08/29/reading-and-creating-conditional-aces-with-powershell-kind-of/
 
 .EXAMPLE
-New-PacConditionalAceCondition -MemberOf Group1, Group2
+New-PacAceCondition -MemberOf Group1, Group2
 
 This creates an ACE condition that is satisfied if a user is a member of both Group1 and Group2.
 
 .EXAMPLE
-New-PacConditionalAceCondition -MemberOfAny Group1, Group2
+New-PacAceCondition -MemberOfAny Group1, Group2
 
 This creates an ACE condition taht is satisifed if a user is a member of either Group1 or Group2
 
@@ -257,7 +257,7 @@ $SD = Get-Acl $TestFile
 $SD | Get-PacAccessControlEntry
 
 # Make changes:
-$SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacConditionalAceCondition -MemberOf Administrators, Users)
+$SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacAceCondition -MemberOf Administrators, Users)
 $SD | Set-Acl
 
 # Show the after:
@@ -271,7 +271,7 @@ $SD = Get-PacSecurityDescriptor $TestFolder
 $SD | Get-PacAccessControlEntry
 
 # Make changes:
-$SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacConditionalAceCondition -MemberOf Administrators, Users)
+$SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacAceCondition -MemberOf Administrators, Users)
 $SD | Set-PacSecurityDescriptor -PacSDOption (New-PacSDOption -SecurityDescriptorSections Access)
 
 # Show the after:
