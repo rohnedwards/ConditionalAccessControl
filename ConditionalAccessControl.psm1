@@ -313,7 +313,19 @@ $TestFolder | Get-PacAccessControlEntry
         
         # Step 3: Create the CommonAce with the condition
         $null = $PSBoundParameters.Remove('InputObject')
-        $NewAce = New-PacAccessControlEntry2 @PSBoundParameters
+
+        $null = $PSBoundParameters.Remove('Condition')
+        $null = $PSBoundParameters.Add('OutputType', [System.Security.AccessControl.CommonAce])
+        $CommonAce = New-PacAccessControlEntry @PSBoundParameters
+        
+        $NewAce = New-Object System.Security.AccessControl.CommonAce (
+            $CommonAce.AceFlags,
+            $CommonAce.AceQualifier,
+            $CommonAce.AccessMask,
+            $CommonAce.SecurityIdentifier,
+            $true,
+            $Condition.GetApplicationData()
+        )
 
         # Just look for the first spot after explicit deny ACEs (before inherited ACEs) to preserve canonical ordering
         for ($i = 0; $i -lt $RawSD.DiscretionaryAcl.Count; $i++) {
