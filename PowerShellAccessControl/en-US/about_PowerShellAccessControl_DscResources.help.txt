@@ -1,0 +1,378 @@
+TOPIC
+    PowerShell Access Control DSC Resources
+
+SHORT DESCRIPTION
+    Overview of the DSC resources found in the PowerShell Access Control module
+
+LONG DESCRIPTION
+    The PowerShell Access Control module contains three Desired State 
+    Configuration (DSC) resources: 
+        1. cAccessControlEntry
+        2. cSecurityDescriptor
+        3. cSecurityDescriptorSddl
+    
+    All three resources are able to make modification to a securable object's 
+    security descriptor (SD). They all share the following parameters:
+        - Path (required): A string describing the location of the securable 
+          object. Combined with ObjectType, this parameter helps to uniquely 
+          identify the securable object. The path syntax for each object type 
+          is listed below.
+
+        - ObjectType (required): A string describing the type of the securable 
+          object. For now, the following types are supported: 
+            
+            o File         - The path points to a file object. The path should 
+                             be in the same format as a path to Get-Item or 
+                             Get-ChildItem, e.g., C:\Temp.
+
+            o Directory    - The path points to a directory object. The path 
+                             should be in the same format as a File object.
+
+            o RegistryKey  - The path points to a registry key. The format 
+                             should be in the same PS provider format as a 
+                             registry path to Get-Item or Get-ChildItem, e.g., 
+                             HKLM:\SOFTWARE.
+
+            o Service      - The path points to a service. The format of the 
+                             path is the service name, e.g., 'bits'.
+
+            o WmiNamespace - The path points to a WMI namespace. The format 
+                             of the path is the same as the -Namespace used in 
+                             a call to Get-WmiObject or Get-CimInstance, e.g., 
+                             'root/cimv2'. 
+
+        - TestInheritedAces: This is a boolean value. By default (when this is
+          $false), any inherited ACEs on the securable object are ignored for
+          testing purposes. If this is $true, inherited ACEs can cause any
+          checks for compliance to fail, but the DSC resource can't fix the
+          problem. If this is $true, it means that inherited ACEs can satisfy
+          the configuration checks.
+
+          Some examples:
+            o cAccessControlEntry set to ensure access is not present: 
+              
+              If TestInheritedAces is $false, the DSC resource will only check
+              to make sure there is no explicit access being granted. If there
+              is, it will remove it.
+
+              If TestInheritedAces is $true, the DSC resource will check all
+              ACEs, both explicit and inherited, to see if the access is being
+              granted. If it is being granted from an explicit ACE, the proper
+              access will be removed. If it is being granted from an inherited
+              ACE, the resource cannot remove the access, so a warning will be
+              generated during a Start-DscConfiguration action. The DSC resource
+              would not be able to bring that specific object's ACE check into
+              compliance.
+
+            o cAccessControlEntry set to ensure access is present: 
+              
+              If TestInheritedAces is $false, the DSC resource will ensure that
+              an explicit ACE is present that grants/denies/audits the requested
+              access.
+
+              If TestInheritedAces is $true, the DSC resource just ensures that
+              an ACE is present that grants/denies/audits the requested access,
+              no matter if the ACE is inherited or explicitly defined. 
+
+            o cSecurityDescriptor is set to control a DACL and/or SACL:
+
+              If TestInheritedAces is $false, the DSC resource will ignore any
+              ACEs that are inherited in both the source Sddl string, and the
+              object's Sddl string. The only part of the ACLs that would need
+              to match are the protection (inheritance enabled or disabled) and
+              the explicitly defined ACEs.
+
+              If TestInheritedAces is $true, inherited ACEs can cause the
+              configuration to fail if they don't match exactly with the Access/
+              Audit CSV definitions. The DSC resource will not attempt to fix 
+              any conflicting inherited ACEs. Also, if an inherited ACE matches 
+              one of the ACEs defined in the configuration, an explicit ACE will 
+              not be created. The inherited ACE will satisfy the requirement.
+
+            o cSecurityDescriptorSddl is set to control a DACL and/or SACL:
+
+              If TestInheritedAces is $false, the DSC resource will ignore any
+              ACEs that are inherited in both the source Sddl string, and the
+              object's Sddl string. The only part of the ACLs that would need
+              to match are the protection (inheritance enabled or disabled) and
+              the explicitly defined ACEs.
+
+              If TestInheritedAces is $true, inherited ACEs can cause the
+              configuration to fail if they don't match exactly with the source
+              Sddl. The DSC resource will not attempt to fix any inherited ACEs.
+
+    More information about each DSC resource can be found in the below 
+    sections.
+
+
+cAccessControlEntry
+-------------------
+    This resource provides the ability to ensure specific access control entries
+    (ACEs) are present or absent from a securable object. A few simple examples 
+    of what can be checked:
+        - Make sure that a principal has the ability to Start and Stop a service
+        - Make sure that a principal does not have a specific permission, e.g.,
+          'Delete' for files/folders, on a securable object
+        - Make sure that a principal has a specific permission denied on a
+          securable object.
+        - Make sure that a principal has all successful and/or failed accesses 
+          audited for any supported securable objects
+
+    The resource has the following inputs:
+        - Path (required): See the beginning of the help topic for more 
+          information.
+
+        - ObjectType (required): See the beginning of the help topic for more 
+          information.
+
+        - AceType (required): Describes the type of the ACE that is tested/set.
+          Valid values are 'Allow', 'Deny', and 'Audit'.
+
+        - Principal (required): The trustee (user, group, computer, etc) that 
+          the ACE applies to.
+
+        - AccessMask (required if -Ensure is set to 'Present'): Describes the 
+          permissions that are granted/denied/audited. This must be an int or 
+          a value that can be cast to an int, e.g., [FileSystemRights]::Delete
+          would work, but not simply 'Delete'. The New-PacAccessMask cmdlet can
+          be used, too. 
+          
+          If no AccessMask is present when Ensure is set to 'Absent', then the 
+          AccessMask is assumed to be [int]::MaxValue, i.e., all access should 
+          be removed for the Principal. 
+          
+          If no AccessMask is present when Ensure is set to 'Present' (or not 
+          provided), an error will be thrown (AccessMask is required in that 
+          scenario).
+
+        - Ensure: Indicates whether or not ACE described should be present. 
+          Valid values are 'Present' or 'Absent'. The default is 'Present'.
+
+        - AppliesTo: A string value that is used to control where the ACE will 
+          apply. This is only useful for container objects (folders, registry 
+          keys, WMI namespaces, etc). 
+          
+          Any of the following strings can be used: Object, ChildContainers, 
+          ChildObjects. Multiple values can be used as long as they are comma 
+          separated and part of the same string. 
+          
+          If this string isn't provided, a default value is used for each type,
+          e.g., folders will have a default of all three values, and registry 
+          keys and WMI namespaces 
+          of "Object, ChildContainers", etc.
+
+        - AuditFlags (required if AceType is 'Audit'): A string value that is 
+          used to control what types of actions are audited.
+
+          Valid values are 'Success' and 'Failure'. Both can be present as long
+          as they are comma separated in a single string, e.g., "Success, Failure".
+
+          If AceType is 'Allow' or 'Deny', this property should not be used.
+
+        - Specific: A boolean value that controls whether or not an ACE must 
+          match exactly on all properties to pass a configuration test.
+
+          For example, testing for the presence of an Allow ACE granting Users
+          Read access to a file would normally match an existing ACE granting 
+          Users Modify access to the file since Read is contained in Modify. If
+          Specific was set to '$true', though, the ACEs would not match. This 
+          value also causes AppliesTo and AuditFlags to match, too.
+
+        - TestInheritedAces: See the begining of the help topic for more information.
+
+    Example:
+        The following example shows how to use the cAccessControlEntry resource
+        to ensure that a directory with the path 'C:\DSC\Test' does not have
+        an ACE granting 'Delete' to the 'Everyone' group to the folder itself:
+
+            cAccessControlEntry EveryoneAuditTestFolder {
+                Ensure = "Absent"
+                Path = "C:\DSC\Test"
+                AceType = "Allow"
+                ObjectType = "Directory"
+                AccessMask = New-PacAccessMask -FolderRights Delete
+                Principal = "Everyone"
+            }
+
+        For more examples, please see the .\Examples\DSC folder in the module
+        directory.
+
+
+cSecurityDescriptor
+-------------------
+
+    This resource provides the ability to control the Owner, Group, DACL (Access
+    ACL), DACL Inheritance, SACL (Audit ACL), and SACL Inheritance. It has the
+    following inputs:
+
+        - Path (required): See the beginning of the help topic for more 
+          information.
+
+        - ObjectType (required): See the beginning of the help topic for more 
+          information.
+
+        - Owner: A string defining the principal to set as the owner of the
+          securable object. Can be a SID string or an NTAccount string, e.g.,
+          'Administrators', 'DOMAIN\UserName', etc.
+
+        - Group: A string defining the principal to set as the group of the
+          securable object. Valid inputs are the same as the Owner above.
+        
+        - Access: A CSV defining any ACEs that must be present in the DACL.
+          Usually provided as a here string (see the example below, and the
+          examples in the '.\examples' folder in the module files.
+
+          The following header fields are required for the CSV: 
+            o Principal
+            o AccessMask: One of the New-PacAccessControl parameters that
+              controls the access mask are required. If you want to provide
+              the numeric rights, AccessMask works. Using FolderRights, 
+              FileRights or RegistryRights are also valid. If AccessMask
+              is the header field used, note that AppliesTo will default to
+              'Object' if it's not specified in the CSV.
+
+          The following header fields are optional for the CSV:
+            o AceType: If this isn't provided, it's assumed that the ACE is
+              and 'Allow' ACE. Valid values are 'Allow' or 'Deny'
+            o AppliesTo: If this isn't provided, the default for the 
+              access mask parameter is used. If FolderRights is the header
+              field in the CSV, this will default to 'Object, ChildContainers,
+              ChildObjects'. If RegistryRights is the header field used, this
+              will default to 'Object, ChildContainers'. If AccessMask is used,
+              this will default to 'Object'.
+
+        - AccessInheritance: Controls whether or not the DACL will inherit
+          ACEs. Valid values are 'Enabled' and 'Disabled'
+
+        - Audit: A CSV defining any ACEs that must be present in the SACL. The
+          input is provided the same was as 'Access'.
+
+          The following header fields are required for the CSV:
+            o Principal: See information for the 'Access' property above.
+            o AccessMask: See information for the 'Access' property above.
+            o AuditFlags: This controls what types of access will be audited.
+              Valid falues are 'Success' and 'Failure'. If you want to audit
+              both, combine them with a comma into a single string like this:
+              'Success, Failure'
+
+          The following header fields are optional:
+            o AceType: This can be omitted, or it must be 'Audit'
+            o AppliesTo: See information for the 'Access' property above.
+        
+        - AuditInheritance: Controls whether or not the SACL will inherit ACEs.
+          Valid values are 'Enabled' and 'Disabled'
+
+        - TestInheritedAces: See the begining of the help topic for more 
+          information.
+
+    Only the parts of the optional parameters that are defined are tested/set.
+    For example, if you only define a value for the Owner, the Group, DACL, DACL
+    Inheritance, SACL, and SACL Inheritance can be set to anything; the DSC
+    resource will not check or change them.
+
+    Example:
+
+        The following example ensures the following things for the 
+        'C:\DSC\Test\file' file:
+          o Owner is set to 'Administrators'
+          o DACL inheritance is disabled
+          o DACL contains two explicit ACEs:
+              * Allow limiteduser FullControl access
+              * Allow Everyone Read access (for now, the Synchronize right is 
+                required; a future version of the module should remove that
+                requirement)
+          o SACL inheritance is enabled
+          o SACL contains one explicit ACE:
+              * Audit FullControl successful and failed access for Everyone
+
+        Notice that the Access and Audit values are defined with a here string,
+        which means they start with @" and end with "@. The terminating "@ must
+        be at the start of a line (all the way to the left).
+
+            cSecurityDescriptor SdFileTest {  # This sets the owner to Administrators
+                Path = "C:\DSC\Test\file"
+                ObjectType = "File"
+                Owner = Administrators
+                AccessInheritance = "Disabled"
+                Access = @"
+                    AceType, Principal, FileRights
+                    Allow, limiteduser, FullControl
+                    Allow, Everyone, "Read, Synchronize"
+"@
+                AuditInheritance = "Enabled"
+                Audit = @"
+                    Principal, AccessMask, AuditFlags
+                    Everyone, 2032127, "Success, Failure"
+"@
+            }
+
+
+
+cSecurityDescriptorSddl
+-----------------------
+    This resource provides the same effective functionality as 
+    cSecurityDescriptor, but it provides that functionality in a very different
+    way. It has the following inputs: 
+        - Path (required): See the beginning of the help topic for more 
+          information.
+
+        - ObjectType (required): See the beginning of the help topic for more 
+          information.
+
+        - Sddl (required): A string providing the parts of the SD to test/set in
+          SDDL format.
+
+          To get the SDDL format, you can use the GetSecurityDescriptorSddlForm()
+          method on a security descriptor object:
+            
+            # Get all sections contained:
+            PS> $SD.GetSecurityDescriptorSddlForm()    
+
+            # Shortcut for the previous command:
+            PS> $SD.SDDL 
+
+            # Get specific sections (valid sections are Owner, Group, Access, 
+            # and Audit):
+            PS> $SD.GetSecurityDescriptorSddlForm("Owner, Access")
+               
+          The Access and Audit sections will contain any ACEs in those sections,
+          and it will also specify whether or not the ACLs have inheritance
+          enabled or disabled.
+
+        - TestInheritedAces: See the begining of the help topic for more information.
+
+    Like cSecurityDescriptor, the only parts of the target object's security 
+    descriptor that will be check/modified are the parts specified in the DSC 
+    node, i.e., if you have an SDDL string that only contains an owner section,
+    only the owner section of the target's SD will be tested/modified.
+
+
+    Example:
+        The following example shows how to use the cSecurityDescriptorSddl 
+        resource to ensure that a directory with the path 'C:\DSC\Test' has
+        a security descriptor that has an owner of 'Administrators', and four
+        ACEs, three of which are inherited. Applying the configuration will
+        only set the ACE that isn't inherited. The TestInheritedAces parameter
+        controls whether or not the other three ACEs affect compliance.
+
+            cSecurityDescriptorSddl SddlOwnerDaclExample {
+                Path = "C:\DSC\Test"
+                ObjectType = "Directory"
+                Sddl = "O:BAD:AI(A;OICI;0x1200a9;;;WD)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;0x1200a9;;;BU)"
+            }
+
+        For more examples, please see the .\Examples\DSC folder in the module
+        directory.
+
+
+
+SEE ALSO
+    about_PowerShellAccessControl_DscResources
+    Add-PacAccessControlEntry
+    Disable-PacAclInheritance
+    Enable-PacAclInheritance
+    Get-PacAccessControlEntry
+    Get-PacSecurityDescriptor
+    New-PacAccessControlEntry
+    Remove-PacAccessControlEntry
+    Set-PacSecurityDescriptor

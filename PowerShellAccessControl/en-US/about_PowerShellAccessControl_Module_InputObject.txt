@@ -1,0 +1,208 @@
+﻿TOPIC
+    PowerShell Access Control Module InputObject Parameter
+
+SHORT DESCRIPTION
+    Description of how to use the InputObject parameter that most PowerShell 
+	Access Control Module cmdlets share.
+
+LONG DESCRIPTION
+    Any of the PAC module cmdlets that view, modify, or save any part of a 
+	security descriptor share a common InputObject parameter. This parameter
+	can take several different types of objects that describe a securable
+	object, e.g., file, folder, registry key, AD object, service, etc. The
+	cmdlets usually accept the parameter as pipeline input by value, or as
+	a named parameter for the command.
+	
+	See each section below for more information about the different types of
+	valid input for the InputObject parameter.
+	
+String
+------
+	When string input is provided, the following PacSDOption parameters will
+	take effect (see the help for New-PacSDOption for more information):
+
+	  o ObjectType: When this is provided, the command won't have to try to
+	        figure out what type of securable object the string describes.
+
+			Example: 
+			An example of getting the security descriptor for the bits service:
+			
+				# Normally, you would do something like this:
+				PS> Get-Service bits -CN RemoteComputer | Get-PacSecurityDescriptor
+				
+				# This would fail (the module wouldn't know if it was a share/
+				# folder/etc):
+				PS> Get-PacSecurityDescriptor -InputObject \\RemoteComputer\bits
+				
+				# This would be valid, though, assuming you provide a computer
+				# you have access to, since you are telling the command that
+				# it's a path to a service:
+				PS> $Option = New-PacSDOption -ObjectType Service
+				PS> Get-PacSecurityDescriptor -InputObject \\RemoteComputer\bits -PacSDOption $Option
+      
+			Example:
+			Getting NTFS permissions vs share permissions
+			
+				# NTFS permissions:
+				Get-PacAccessControlEntry \\server\share
+				
+				# Share permissions:
+				Get-PacAccessControlEntry \\server\share -PacSDOption (New-PacSDOption -ObjectType LMShare)
+
+	  o LiteralPath: After the path type has been determined (or specified
+	        through the ObjectType PacSDOption), the path is resolved so that
+		    any wildcard characters are evaluated. Even if no wildcards are 
+			present in the path, path resolution occurs, e.g., providing 
+			C:\folder1\folder1 as input would mean that the command would
+			attempt to check 'C:\' for a folder named 'folder1', then it would
+			attempt to check 'C:\folder1' for a folder named 'folder2'. This
+			can cause problems if you are attempting to access a child object
+			that you have access to that is contained in a container that you
+			don't have access to. 
+			
+			Example: 
+			Assume you are trying to get a security descriptor for
+			'C:\folder1\folder2', but you don't have any access to 'C:\folder1'
+			(You do have access to folder2, though):
+			
+				# This command should fail because you can't get a directory
+				# listing of c:\folder1:
+				PS> Get-PacSecurityDescriptor -InputObject c:\folder1\folder2
+				
+				# This gets around the issue because folder1 isn't touched:
+				PS> $Option = New-PacSDOption -LiteralPath
+				PS> Get-PacSecurityDescriptor -InputObject c:\folder1\folder2 -PacSDOption $Option
+		
+
+	  o Recurse: This option ensures that any child containers and/or objects
+	        are evaluated, along with any paths that are specified in the
+			original path. Only certain types of paths will utilize this option,
+			otherwise it is ignored.
+			
+			Example:
+			Getting security descriptors for 'c:\folder1' and all subfolders and
+			files:
+			
+				PS> Get-PacSecurityDescriptor c:\folder1 -PacSDOption (New-PacSDOption -Recurse)
+				
+
+	  o Directory: This option ensures that folders are used. If neither File or
+	        Directory is provided, both types of objects are used. This is
+			option is ignored for any non-filesystem paths.
+
+			Example:
+			Getting security descriptors for 'c:\folder1' and all subfolders (no files):
+			
+				PS> Get-PacSecurityDescriptor c:\folder1 -PacSDOption (New-PacSDOption -Recurse -Directory)
+
+	  o File: This option ensures that files are used. If neither File or
+	        Directory is provided, both types of objects are used. This is
+			ignored for any non-filesystem paths.
+
+			Example:
+			Getting security descriptors files contained in 'c:\folder1' (no directories):
+			
+				PS> Get-PacSecurityDescriptor c:\folder1 -PacSDOption (New-PacSDOption -Recurse -File)
+
+
+	Wildcards are supported for certain types of paths, e.g., filesystem and 
+	registry paths, as long as the LiteralPath PacSDOption is not used at
+	the same time. This command would be valid:
+
+		# Get DACL ACEs for all direct subfolders and files contained in c:\folder1:
+		PS> Get-PacAccessControlEntry c:\folder1\*
+		
+		# This would provide identical results:
+		PS> dir c:\folder1 | Get-PacAccessControlEntry
+
+	This would also be valid (and could be combined with PacSDOptions above):
+		
+		# Get DACL ACEs for all subfolders and files that have a name that
+		# starts with 'test' that are inside a folder that has a name that
+		# starts with 'folder':
+		PS> Get-PacAccessControlEntry c:\folder*\test*
+
+	Wildcards are not supported outside of filesystem and registry paths, so
+	you will most likely be providing an invalid path if you try to use one.
+	
+	
+	Inline PacSDOptions:
+	--------------------
+	Some PacSDOptions can be provided "inline" at the beginning of the path
+	instead of through the -PacSDOption parameter. To use this, place the
+	following string at the beginning of the string path:
+
+		(?<inline_PacSDOptions_here>)
+
+	Here are the valid inline options (see above for descriptions of each
+	option):
+	  o l: LiteralPath
+	  o r: Recurse
+	  o d: Directory
+	  o f: File
+	  
+	Examples:
+
+		# This command:
+		PS> Get-PacAccessControlEntry "(?rfl) c:\folder1\folder2"
+		# Does the same thing as this one:
+		PS> Get-PacAccessControlEntry c:\folder1\folder2 -PacSDOption (New-PacSDOption -LiteralPath -Recurse -File)
+	
+
+WMI Object/CIM Instance
+-----------------------
+	WMI object and/or CIM instances of the following WMI classes are supported as input to the InputObject parameter:
+	  o __SystemSecurity (This is the WMI namespace security class)
+	  o Win32_Printer / MSFT_Printer
+	  o Win32_Service
+	  o Win32_LogicalShareSecuritySetting / Win32_Share / MSFT_SmbShare
+	  o Win32_Process
+	  
+	Here are some examples:
+		PS> Get-CimInstance Win32_Share -ComputerName RemoteComputer | Get-PacSecurityDescriptor
+		PS> Get-WmiObject -Namespace root -Class __SystemSecurity -EnableAllPrivileges | Get-PacAccessControlEntry
+		PS> Get-CimInstance Win32_Printer | Get-PacAccessControlEntry
+	  
+
+Miscellaneous .NET Objects
+--------------------------
+	There are lots of other different .NET objects that can be accepted directly. Here are some examples, though this
+	list is not exhaustive. When in doubt, try to use an object with a Get* cmdlet:
+
+	  Get-ChildItem with filesystem path:
+		PS> Get-ChildItem c:\folder1 | Get-PacSecurityDescriptor
+
+	  Get-Item with registry path:
+		PS> Get-Item HKLM:\SOFTWARE | Get-PacAccessControlEntry
+
+	  Get-ChildItem with ActiveDirectory provider:
+		PS> Get-ChildItem AD:\ | Get-PacSecurityDescriptor
+		
+	  AD module cmdlets:
+		PS> Get-ADUser $env:username | Get-PacSecurityDescriptor
+		PS> Get-ADComputer $env:COMPUTERNAME | Get-PacSecurityDescriptor
+		
+	  WSMan objects:
+	    PS> dir wsman:\localhost -Recurse | where Name -eq Sddl | Get-PacAccessControlEntry
+
+	  Service:
+	    PS> Get-Service bits | Get-PacSecurityDescriptor
+
+
+
+SEE ALSO
+    about_PowerShellAccessControl_Module
+    about_PowerShellAccessControl_DscResources
+    Add-PacAccessControlEntry
+    Disable-PacAclInheritance
+    Enable-PacAclInheritance
+    Get-PacAccessControlEntry
+    Get-PacAdObjectAceType
+    Get-PacEffectiveAccess
+    Get-PacSecurityDescriptor
+    New-PacAccessControlEntry
+    New-PacSecurityDescriptor
+    Remove-PacAccessControlEntry
+    Repair-PacAclCanonicalOrder
+    Set-PacOwner
+    Set-PacSecurityDescriptor

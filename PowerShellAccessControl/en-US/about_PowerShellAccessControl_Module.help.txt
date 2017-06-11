@@ -1,0 +1,183 @@
+TOPIC
+    PowerShell Access Control Module
+
+SHORT DESCRIPTION
+    Module for managing security descriptors in PowerShell.
+
+LONG DESCRIPTION
+    The PowerShell Access Control Module is a module written for Windows 
+    PowerShell version 3.0 and higher. It can be used as a supplement or 
+    a full replacement to the native Get-Acl and Set-Acl cmdlets.
+
+
+SUPPLEMENT TO NATIVE CMDLETS
+----------------------------
+    Modifying security descriptors for objects that Get-Acl supports generally 
+    follows this pattern:
+
+    1. Call Get-Acl to get the security descriptor:
+
+       PS> $Acl = Get-Acl C:\temp
+
+    2. View the Access and/or Audit properties to view currentl ACLs:
+
+       PS> $Acl.Access
+
+    3. Use .NET object constructors to build an access control entry (the 
+       object type varies depending on the object being secured:
+
+       PS> $Ace = New-Object System.Security.AccessControl.FileSystemAccessRule (
+               "Everyone",
+               "Modify",
+               "ContainerInherit, ObjectInherit",
+               "None",
+               "Allow"
+           )
+
+    4. Use .NET methods on the security descriptor object to add/remove/modify 
+       access control lists (either discretionary or system ACLs) with the ACE 
+       created in step 2:
+
+       PS> $Acl.AddAccessRule($Ace)
+
+    5. Call Set-Acl to commit the changes (or call SetAccessControl() .NET 
+       method):
+
+       PS> $Acl | Set-Acl
+        # or
+       PS> [System.IO.File]::SetAccessControl($Acl.Path, $Acl)
+
+
+    When used as a supplement to the native cmdlets, the PowerShell Access 
+    Control module can be used to simplify or completely remove step 3 above. 
+    Using the New-AccessControlEntry function, step #3 above can become the 
+    following:
+
+    PS> $Ace = New-PacAccessControlEntry -Principal Everyone -FolderRights Modify
+
+
+    See the help for the New-PaccAccessControlEntry command to see how to set 
+    other properties of the ACE, such as the type and what it applies to.
+
+    Instead of using the AddAccessRule() .NET method in step #4, the 
+    Add-AccessConrolEntry can be used:
+    
+    PS> $Acl | Add-PacAccessControlEntry -AceObject $Ace
+
+
+    Instead of doing that, steps #3 and #4 can actually be combined:
+    
+    PS> $Acl | Add-PacAccessControlEntry -Principal Everyone -FolderRights Modify
+
+
+    That single line will take care of steps #3 and #4 above. See the help for 
+    the Add-PacAccessControlEntry and Remove-PacAccessControlEntry commands for 
+    more examples of how to modify the ACEs contained in ACLs.
+
+    The Get-PacAccessControlEntry function can be used to replace step #2:
+    
+    PS> $Acl | Get-PacAccessControlEntry
+      # or
+    PS> Get-PacAccessControlEntry C:\temp
+
+    See the help for that command to see other options, including how to 
+    filter ACEs that are displayed.
+
+    Any of the other commands contained in the module that view or modify security
+    descriptors should be able to be used with the object instances returned from 
+    Get-Acl.
+
+
+REPLACEMENT FOR NATIVE CMDLETS
+------------------------------
+    The PowerShell Access Control module has two commands that can be used as
+    replacements for Get-Acl and Set-Acl: Get-PacSecurityDescriptor and 
+    Set-PacSecurityDescriptor. See the help sections for each of those commands
+    for more information.
+
+    The Get/Modify/Set pattern mentioned above can still be used with the 
+    module. Look at the following example, where the 'Everyone' group is given 
+    'Modify' permission over the 'c:\temp', except that the group won't be able
+    to delete the folder itself:
+
+    PS> $SD = Get-PacSecurityDescriptor c:\temp
+    PS> $SD | Add-PacAccessControlEntry -Principal Everyone -FolderRights Modify
+    PS> $SD | Remove-PacAccessControlEntry -Principal Everyone -FolderRights Delete -AppliesTo Object
+    PS> $SD | Set-PacSecurityDescriptor
+
+
+    The first and last steps can actually be skipped, though. Each of the 
+    security descriptor commands have a parameter, InputObject, that can accept
+    a security descriptor (obtained from Get-Acl/GetAccessControl(), Get-
+    PacSecurityDescriptor, or a PAC module command that supports the PassThru
+    switch) or a large list of miscellaneous objects, e.g., strings that point 
+    to supported objects, files, folders, registry keys, AD objects, services, 
+    WMI/CIM instances, etc. (See the 'about_PowerShellAccessControl_Module_InputObject'
+    help topic for more information about supported string formats and object
+    instances).
+    
+    If the InputObject is a security descriptor and the Apply switch is not used,
+    the changes are made to the in-memory security descriptor instance, but not 
+    saved. That's what happened in the previous example: the first command got
+    the security descriptor and saved it to the $SD variable. The second and 
+    third commands both made changes to the security descriptor contained in the
+    $SD variable, but those changes only existed in memory, i.e., 'c:\temp' still
+    had the original security descriptor. It wasn't until Set-PacSecurityDescriptor
+    was called against the $SD variable that the user was prompted and the changes 
+    were saved.
+    
+    If the InputObject is not a security descriptor, though, an attempt is made 
+    to get the security descriptor from the InputObject provided. If that attempt 
+    is successful, the requested change is made, and the command attempts to save
+    the modification. That means that the following commands do the same thing as
+    the previous commands (of course, the following commands will prompt you two
+    times instead of the previous example's one):
+
+    PS> Add-PacAccessControlEntry c:\temp -Principal Everyone -FolderRights Modify
+    PS> Remove-PacAccessControlEntry c:\temp -Principal Everyone -FolderRights Delete -AppliesTo Object
+
+    To make more than one change to the security descriptor, multiple functions 
+    can be chained together by using the PassThru switch parameter. The PassThru 
+    switch makes the functions output the security descriptor (normally there is 
+    no output). That means any of the following commands do the same as the
+    previous examples:
+
+    PS> Add-PacAccessControlEntry c:\temp -Principal Everyone -FolderRights Modify -PassThru | 
+            Remove-PacAccessControlEntry c:\temp -Principal Everyone -FolderRights Delete -AppliesTo Object -PassThru |
+            Set-PacSecurityDescriptor
+
+        # or
+
+    PS> Add-PacAccessControlEntry c:\temp -Principal Everyone -FolderRights Modify -PassThru | 
+            Remove-PacAccessControlEntry c:\temp -Principal Everyone -FolderRights Delete -AppliesTo Object -Apply
+
+
+    Note that the -Apply switch was provided to the last call to 
+    Remove-PacAccessControlEntry. Since that command received a security 
+    descriptor as input, Apply was not the default action.
+
+    For more information, please see the help topics for each of the individual 
+    module commands.
+
+
+DESIRED STATE CONFIGURATION
+---------------------------
+Please see the about_PowerShellAccessControl_DscResources help topic.
+
+
+SEE ALSO
+    about_PowerShellAccessControl_InputObject
+    about_PowerShellAccessControl_DscResources
+    Add-PacAccessControlEntry
+    Disable-PacAclInheritance
+    Enable-PacAclInheritance
+    Get-PacAccessControlEntry
+    Get-PacAdObjectAceType
+    Get-PacEffectiveAccess
+    Get-PacSecurityDescriptor
+    New-PacAccessControlEntry
+    New-PacSecurityDescriptor
+    Remove-PacAccessControlEntry
+    Repair-PacAclCanonicalOrder
+    Set-PacOwner
+    Set-PacSecurityDescriptor

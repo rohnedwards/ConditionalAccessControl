@@ -1,0 +1,484 @@
+<Configuration>
+    <Controls>
+        <Control>
+            <Name>ACE-GroupingFormat</Name>
+            <CustomControl>
+                <CustomEntries>
+                    <CustomEntry>
+                        <CustomItem>
+                            <Frame>
+                                <LeftIndent>4</LeftIndent>
+                                <CustomItem>
+                                    <ExpressionBinding>
+                                        <ScriptBlock>
+                                            $LabelLength = -11
+                                            #$StringBuilder = New-Object System.Text.StringBuilder
+
+                                            "{0,$LabelLength}: {1}`n{2,$LabelLength}: {3}`n{4,$LabelLength}: {5}" -f "Path", $_.Path, "Owner", $_.Owner, "Inheritance", $_.GetInheritanceString()
+                                            #$StringBuilder.ToString()
+                                        </ScriptBlock>
+                                    </ExpressionBinding>
+                                    <Newline/>
+                                </CustomItem> 
+                            </Frame>
+                        </CustomItem>
+                    </CustomEntry>
+                </CustomEntries>
+            </CustomControl>
+        </Control>
+        <Control>
+            <Name>EffectiveAccess-GroupingFormat</Name>
+            <CustomControl>
+                <CustomEntries>
+                    <CustomEntry>
+                        <CustomItem>
+                            <Frame>
+                                <LeftIndent>4</LeftIndent>
+                                <CustomItem>
+                                    <ExpressionBinding>
+                                        <ScriptBlock>
+                                            "Principal : {0}`nPath      : {1}`nType      : {2}" -f $_.Principal, $_.Path, $_.Path.ObjectType
+                                        </ScriptBlock>
+                                    </ExpressionBinding>
+                                    <Newline/>
+                                </CustomItem>
+                            </Frame>
+                        </CustomItem>
+                    </CustomEntry>
+                </CustomEntries>
+            </CustomControl>
+        </Control>
+    </Controls>
+    <ViewDefinitions>
+        <View>
+            <Name>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</Name>
+            <ViewSelectedBy>
+                <TypeName>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</TypeName>
+            </ViewSelectedBy>
+
+            <CustomControl>
+                <CustomEntries>
+                    <CustomEntry>
+                        <CustomItem>
+                            <Frame>
+                                <LeftIndent>2</LeftIndent>
+                                <CustomItem>
+                                    <NewLine/>
+                                    <Text> Path : </Text>
+                                    <ExpressionBinding>
+                                        <PropertyName>Path</PropertyName>
+                                    </ExpressionBinding><NewLine/>
+                                    <Text> Type : </Text>
+                                    <ExpressionBinding>
+                                        <PropertyName>ObjectType</PropertyName>
+                                    </ExpressionBinding><NewLine/>
+                                    <Text>Owner : </Text>
+                                    <ExpressionBinding>
+                                        <ScriptBlock>
+                                            $_.ToString("Owner", 80, $true, $true, $false).Trim()
+                                        </ScriptBlock>
+                                    </ExpressionBinding><NewLine/>
+                                    <Text>Group : </Text>
+                                    <ExpressionBinding>
+                                        <ScriptBlock>
+                                            $_.ToString("Group", 80, $true, $true, $false).Trim()
+                                        </ScriptBlock>
+                                    </ExpressionBinding><NewLine/>
+                                    <Frame>
+                                        <LeftIndent>4</LeftIndent>
+                                        <CustomItem>
+                                            <NewLine/>
+                                            <ExpressionBinding>
+                                                <ScriptBlock>
+                                                    $InheritanceEnabled = " (Inheritance Enabled)"
+                                                    $InheritanceDisabled = " (Inheritance Disabled)"
+                                                    $AclNotCanonical = " (ACL NOT CANONICAL)"
+
+                                                    # Check for $true or $false ($null means SD doesn't contain this section)
+                                                    $DaclLabel = "DACL"
+                                                    if ($_.AreAccessRulesProtected) {
+                                                        $DaclLabel += $InheritanceDisabled
+                                                    }
+                                                    elseif ($_.AreAccessRulesProtected -eq $false) {
+                                                        $DaclLabel += $InheritanceEnabled
+                                                    }
+                                                    if ($_.AreAccessRulesCanonical -eq $false) {
+                                                        $DaclLabel += $AclNotCanonical
+                                                    }
+
+                                                    $SaclLabel = "SACL"
+                                                    if ($_.AreAuditRulesProtected) {
+                                                        $SaclLabel += $InheritanceDisabled
+                                                    }
+                                                    elseif ($_.AreAuditRulesProtected -eq $false) {
+                                                        $SaclLabel += $InheritanceEnabled
+                                                    }
+                                                    if ($_.AreAuditRulesCanonical -eq $false) {
+                                                        $SaclLabel += $AclNotCanonical
+                                                    }
+
+                                                    $ScreenWidth = $Host.UI.RawUI.BufferSize.Width
+                                                    $AclWidth = $_.GetAclFormattingWidth()
+                                                    $Properties = @{
+                                                            Label=$DaclLabel; 
+                                                            E={
+                                                                # This adds significant overhead, but it should only cost
+                                                                # time when user is looking at SD. At that point, the overhead
+                                                                # shouldn't be that noticeable:
+
+                                                                # Only show first 10 lines:
+                                                                $OutputString = $_.AccessToString
+                                                                if ($OutputString -match "^(.*?\n){10}(?=.)") {
+                                                                    $OutputString = "{0}[Continued...]" -f $matches[0]
+                                                                }
+                                                                $OutputString
+                                                            }
+                                                            Width = [int] ($AclWidth * 1.1)
+                                                        }, @{
+                                                            Label="$SaclLabel"; 
+                                                            E={
+                                                                # This adds significant overhead, but it should only cost
+                                                                # time when user is looking at SD. At that point, the overhead
+                                                                # shouldn't be that noticeable:
+
+                                                                # Only show first 10 lines:
+                                                                $OutputString = $_.AuditToString
+                                                                if ($OutputString -match "^(.*?\n){10}(?=.)") {
+                                                                    $OutputString = "{0}[Continued...]" -f $matches[0]
+                                                                }
+                                                                $OutputString
+                                                            }
+                                                            Width = [int] ($AclWidth * 1.1)
+                                                        }
+
+                                                    if (($AclWidth * 2.2) -gt $ScreenWidth) {
+                                                        $MaxPropertyIndex = 0  # Drop SACL from table
+                                                    }
+                                                    else {
+                                                        $MaxPropertyIndex = 1
+                                                    }
+                                                    $Table = $_ | Microsoft.PowerShell.Utility\Format-Table -Property $Properties[0..$MaxPropertyIndex] -Wrap | Microsoft.PowerShell.Utility\Out-String | % Trim
+                                                    $Table -split "`n" | % {
+                                                        "    " + $_.TrimEnd()
+                                                    } | out-string
+                                                </ScriptBlock>
+                                            </ExpressionBinding>
+                                        </CustomItem>
+                                    </Frame>
+                                </CustomItem>
+                            </Frame>
+                            <NewLine/>
+                        </CustomItem>
+                    </CustomEntry>
+                </CustomEntries>
+            </CustomControl>
+        </View>
+        <View>
+            <Name>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</Name>
+            <ViewSelectedBy>
+                <TypeName>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</TypeName>
+            </ViewSelectedBy>
+
+            <TableControl>
+                <TableHeaders>
+                    <TableColumnHeader>
+                        <Width>50</Width>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>Access</Label>
+                    </TableColumnHeader>
+                 </TableHeaders>
+                <TableRowEntries>
+                    <TableRowEntry>
+                        <Wrap/>
+                        <TableColumnItems>
+                            <TableColumnItem>
+                                <PropertyName>Path</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                    # This adds significant overhead, but it should only cost
+                                    # time when user is looking at SD. At that point, the overhead
+                                    # shouldn't be that noticeable:
+
+                                    # Only show first 10 lines:
+                                    $OutputString = $_.AccessToString
+                                    if ($OutputString -match "^(.*?\n){10}(?=.)") {
+                                        $OutputString = "{0}[Continued...]" -f $matches[0]
+                                    }
+                                    $OutputString
+                                </ScriptBlock>
+                            </TableColumnItem>
+                        </TableColumnItems>
+                    </TableRowEntry>
+                 </TableRowEntries>
+            </TableControl>
+        </View>
+        <View>
+            <Name>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</Name>
+            <ViewSelectedBy>
+                <TypeName>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</TypeName>
+            </ViewSelectedBy>
+            <ListControl>
+                <ListEntries>
+                    <ListEntry>
+                        <ListItems>
+                            <ListItem>
+                                <PropertyName>Path</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>ObjectType</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <Label>Owner</Label>
+                                <ScriptBlock>$_.ToString("Owner", 0, $true, $false, $false).Trim()</ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <Label>Group</Label>
+                                <ScriptBlock>$_.ToString("Group", 0, $true, $false, $false).Trim()</ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>MandatoryIntegrityLabel</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <Label>AreAccessRulesProtected</Label>
+                                <ScriptBlock>
+                                    $InheritanceEnabled = "(Inheritance Enabled)"
+                                    $InheritanceDisabled = "(Inheritance Disabled)"
+                                    
+                                    $Label = $_.AreAccessRulesProtected
+                                    if ($Label -eq $true) {
+                                        $Label = "$Label $InheritanceDisabled"
+                                    }
+                                    elseif ($Label -eq $false) {
+                                        $Label = "$Label $InheritanceEnabled"
+                                    }
+                                    $Label
+                                </ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <Label>Access</Label>
+                                <ScriptBlock>
+                                    # This adds significant overhead, but it should only cost
+                                    # time when user is looking at SD. At that point, the overhead
+                                    # shouldn't be that noticeable:
+
+                                    # Only show first 10 lines:
+                                    $OutputString = $_.AccessToString
+                                    if ($OutputString -match "^(.*?\n){10}(?=.)") {
+                                        $OutputString = "{0}[Continued...]" -f $matches[0]
+                                    }
+                                    $OutputString
+                                </ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <Label>AreAuditRulesProtected</Label>
+                                <ScriptBlock>
+                                    $InheritanceEnabled = "(Inheritance Enabled)"
+                                    $InheritanceDisabled = "(Inheritance Disabled)"
+                                    
+                                    $Label = $_.AreAuditRulesProtected
+                                    if ($Label -eq $true) {
+                                        $Label = "$Label $InheritanceDisabled"
+                                    }
+                                    elseif ($Label -eq $false) {
+                                        $Label = "$Label $InheritanceEnabled"
+                                    }
+                                    $Label
+                                </ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <Label>Audit</Label>
+                                <ScriptBlock>
+                                    # This adds significant overhead, but it should only cost
+                                    # time when user is looking at SD. At that point, the overhead
+                                    # shouldn't be that noticeable:
+
+                                    # Only show first 10 lines:
+                                    $OutputString = $_.AuditToString
+                                    if ($OutputString -match "^(.*?\n){10}(?=.)") {
+                                        $OutputString = "{0}[Continued...]" -f $matches[0]
+                                    }
+                                    $OutputString
+                                </ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <Label>Sddl</Label>
+                                <ScriptBlock>
+                                    $MaxLength = 500
+
+                                    if ($_.Sddl.Length -gt $MaxLength) {
+                                        "{0}..." -f $_.Sddl.SubString(0,$MaxLength)
+                                    }
+                                    else {
+                                        $_.Sddl
+                                    }
+                                </ScriptBlock>
+                            </ListItem>
+                        </ListItems>
+                    </ListEntry>
+                </ListEntries>
+            </ListControl>
+        </View>
+        <View>
+            <Name>ROE.PowerShellAccessControl.AdaptedCommonAce</Name>
+            <ViewSelectedBy>
+                <TypeName>ROE.PowerShellAccessControl.AdaptedCommonAce</TypeName>
+            </ViewSelectedBy>
+
+            <GroupBy><!--Seems to only show it when the Path property exists; as long as this is normal, then it will allow us to use the same ViewDefinitions for ACEs on an object, and ACEs that have the Path added from Get-AccessControlEntry -->
+                <PropertyName>Path</PropertyName>
+                <CustomControlName>ACE-GroupingFormat</CustomControlName>  
+            </GroupBy>
+
+            <TableControl>
+                <TableHeaders>
+                    <TableColumnHeader>
+                        <Label>AceType</Label>
+                        <Width>10</Width>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>Principal</Label>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>AccessMask</Label>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>InheritedFrom</Label>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>AppliesTo</Label>
+                    </TableColumnHeader>
+                 </TableHeaders>
+                <TableRowEntries>
+                    <TableRowEntry>
+                        <Wrap/>
+                        <TableColumnItems>
+                            <TableColumnItem>
+                                <PropertyName>AceType</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                    if ($_.Principal -is [System.Security.Principal.SecurityIdentifier]) {
+                                        "SID: {0}" -f $_.Principal.ToString()
+                                    }
+                                    else {
+                                        $_.Principal -replace "(BUILTIN|NT AUTHORITY)\\", ""
+                                    }
+                                </ScriptBlock>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>AccessMask</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                    $MaxLength = 150
+                                    if ($_.InheritedFrom.Length -gt $MaxLength) {
+                                        "{0}..." -f $_.InheritedFrom.Substring(0, $MaxLength)
+                                    }
+                                    else {
+                                        $_.InheritedFrom
+                                    }
+                                </ScriptBlock>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                    $_.AppliesTo.ToString(-not $PacOptions.DontAbbreviateAppliesTo)
+                                </ScriptBlock>
+                            </TableColumnItem>
+                        </TableColumnItems>
+                    </TableRowEntry>
+                 </TableRowEntries>
+            </TableControl>
+        </View>
+        <View>
+            <Name>ROE.PowerShellAccessControl.AdaptedCommonAce</Name>
+            <ViewSelectedBy>
+                <TypeName>ROE.PowerShellAccessControl.AdaptedCommonAce</TypeName>
+            </ViewSelectedBy>
+
+            <GroupBy><!--Seems to only show it when the Path property exists; as long as this is normal, then it will allow us to use the same ViewDefinitions for ACEs on an object, and ACEs that have the Path added from Get-AccessControlEntry -->
+                <PropertyName>Path</PropertyName>
+                <CustomControlName>ACE-GroupingFormat</CustomControlName>  
+            </GroupBy>
+
+            <ListControl>
+                <ListEntries>
+                    <ListEntry>
+                        <ListItems>
+                            <ListItem>
+                                <Label>AceType</Label>
+                                <ScriptBlock>
+                                    if ($_.AuditFlags.value__) {
+                                        "{0} ({1})" -f $_.AceType, $_.AuditFlags
+                                    }
+                                    else {
+                                        $_.AceType
+                                    }
+                                </ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <Label>Principal</Label>
+                                <ScriptBlock>
+                                    if ($_.Principal -is [System.Security.Principal.SecurityIdentifier]) {
+                                        "Account Unknown ({0})" -f $_.Principal.ToString()
+                                    }
+                                    else {
+                                        $_.Principal
+                                    }
+                                </ScriptBlock>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>AccessMask</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>InheritedFrom</PropertyName>
+                            </ListItem>
+                            <ListItem>
+                                <PropertyName>AppliesTo</PropertyName>
+                            </ListItem>
+                        </ListItems>
+                    </ListEntry>
+                </ListEntries>
+            </ListControl>
+        </View>
+        <View>
+            <Name>EffectiveAccessDetailedTable</Name>
+            <ViewSelectedBy>
+                <TypeName>ROE.PowerShellAccessControl.PacEffectiveAccessDetailedResult</TypeName>
+            </ViewSelectedBy>
+
+            <GroupBy>
+                <ScriptBlock>"{0}{1}" -f $_.Path, $_.Principal</ScriptBlock>
+                <CustomControlName>EffectiveAccess-GroupingFormat</CustomControlName>  
+            </GroupBy>
+
+            <TableControl>
+                <TableHeaders>
+                    <TableColumnHeader>
+                        <Width>12</Width>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                    </TableColumnHeader>
+                 </TableHeaders>
+                <TableRowEntries>
+                    <TableRowEntry>
+                        <TableColumnItems>
+                            <TableColumnItem>
+                                <PropertyName>Granted</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>AccessMask</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>LimitedBy</PropertyName>
+                            </TableColumnItem>
+                        </TableColumnItems>
+                    </TableRowEntry>
+                 </TableRowEntries>
+            </TableControl>
+        </View>
+    </ViewDefinitions>
+</Configuration>

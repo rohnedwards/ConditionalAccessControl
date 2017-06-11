@@ -1,0 +1,124 @@
+<Types>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.PacAccessRule</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.PacObjectAccessRule</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.PacAuditRule</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.PacObjectAuditRule</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.AdaptedCommonAce</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>System.Security.AccessControl.CommonAce</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>System.Security.AccessControl.ObjectAce</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>System.Security.AccessControl.QualifiedAce</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.AdaptedAce</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.GenericAceConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>System.Security.AccessControl.AceFlags</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.AceFlagsConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>System.Security.AccessControl.AceQualifier</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.AceTypeConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.Enums.AppliesTo</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.AppliesToConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.AccessMaskDisplay</Name>
+        <TypeConverter>
+            <TypeName>ROE.PowerShellAccessControl.AccessMaskDisplayConverter</TypeName>
+        </TypeConverter>
+    </Type>
+    <Type>
+        <Name>ROE.PowerShellAccessControl.AdaptedSecurityDescriptor</Name>
+        <Members>
+            <ScriptMethod>
+                <Name>GetAclFormattingWidth</Name>
+                <Script>
+                    # 40% of screen width
+                    $ScreenWidth = $Host.UI.RawUI.BufferSize.Width
+                    [int] $AclWidth = $ScreenWidth * .4
+
+                    if ($AclWidth -lt 50) { $AclWidth = 50 }
+                    $AclWidth
+                </Script>
+            </ScriptMethod>
+            <ScriptProperty>
+                <Name>Access</Name>
+                <GetScriptBlock>
+                    $this.GetAccessRules($true, $true, [ROE.PowerShellAccessControl.PacPrincipal]);
+                </GetScriptBlock>
+            </ScriptProperty>
+            <ScriptProperty>
+                <Name>AccessToString</Name>
+                <GetScriptBlock>
+                    $AclWidth = $this.GetAclFormattingWidth()
+                    if ($AclWidth -gt 60) { $WrapAcesText = $true }
+                    $this.ToString("DACL", $AclWidth, $WrapAcesText, $true, $false).Trim()
+                </GetScriptBlock>
+            </ScriptProperty>
+            <ScriptProperty>
+                <Name>Audit</Name>
+                <GetScriptBlock>
+                    $this.GetAuditRules($true, $true, [ROE.PowerShellAccessControl.PacPrincipal]);
+                </GetScriptBlock>
+            </ScriptProperty>
+            <ScriptProperty>
+                <Name>AuditToString</Name>
+                <GetScriptBlock>
+                    $AclWidth = $this.GetAclFormattingWidth()
+                    if ($AclWidth -gt 60) { $WrapAcesText = $true }
+                    $this.ToString("SACL", $AclWidth, $WrapAcesText, $true, $false).Trim()
+                </GetScriptBlock>
+            </ScriptProperty>
+        </Members>
+    </Type>
+</Types>
