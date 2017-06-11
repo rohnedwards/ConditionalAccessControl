@@ -128,7 +128,7 @@ $SD | Get-PacAccessControlEntry
 
 # Make changes:
 $SD | Add-PacAccessControlEntry2 -Principal $env:USERNAME -FolderRights FullControl -Condition (New-PacAceCondition -MemberOf Administrators, Users)
-$SD | Set-PacSecurityDescriptor -PacSDOption (New-PacSDOption -SecurityDescriptorSections Access)
+$SD | Set-PacSecurityDescriptor
 
 # Show the after:
 $TestFolder | Get-PacAccessControlEntry
@@ -193,6 +193,6 @@ $TestFolder | Get-PacAccessControlEntry
         $RawSD.DiscretionaryAcl.InsertAce($i, $NewAce)
 
         # Step 5: Modify the InputObject so it contains the new ACE 
-        $InputObject.SetSecurityDescriptorSddlForm($RawSD.GetSddlForm("All"))
+        $InputObject.SetSecurityDescriptorSddlForm($RawSD.GetSddlForm('All'), 'Access')
     }
 }
